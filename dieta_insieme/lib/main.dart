@@ -21,22 +21,36 @@ import 'providers/chat_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('it_IT', null);
-  
+
   final prefs = await SharedPreferences.getInstance();
-  
+
+  // Carica API key e modello salvati
+  final savedApiKey = prefs.getString('gemini_api_key') ?? '';
+  final savedModelId = prefs.getString('gemini_model') ?? 'gemini-2.5-flash';
+
   // Services instantiation
   final giornoDietaService = GiornoDietaService(prefs);
   final pastoAnalisiService = PastoAnalisiService();
-  final geminiService = GeminiService();
+  final geminiService = GeminiService(apiKey: savedApiKey, modelId: savedModelId);
   final pastoAssistantService = PastoAssistantService(geminiService);
-  final storageService = StorageService(); // Note: AppState also uses StorageService internally, consider sharing instance or making singleton
-  
+  final storageService = StorageService();
+
+  // Settings provider con callback per aggiornare GeminiService
+  final settingsProvider = SettingsProvider(prefs);
+  settingsProvider.onApiSettingsChanged = () {
+    geminiService.updateSettings(
+      apiKey: settingsProvider.apiKey,
+      modelId: settingsProvider.geminiModel.modelId,
+    );
+  };
+
   runApp(
     MultiProvider(
       providers: [
         Provider<GiornoDietaService>.value(value: giornoDietaService),
+        Provider<GeminiService>.value(value: geminiService),
         ChangeNotifierProvider(create: (context) => AppState()),
-        ChangeNotifierProvider(create: (context) => SettingsProvider(prefs)),
+        ChangeNotifierProvider.value(value: settingsProvider),
         ChangeNotifierProvider(create: (context) => ChatProvider(geminiService, giornoDietaService)),
         ChangeNotifierProvider(
           create: (context) => PastoOggiProvider(

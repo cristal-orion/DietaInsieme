@@ -90,3 +90,6 @@ FASE_6_GUIDA.md
 # Windows reserved names
 nul
 **/nul
+
+# Claude Code settings (may contain sensitive data)
+.claude/

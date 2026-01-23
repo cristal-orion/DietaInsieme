@@ -4,35 +4,54 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import '../utils/prompts.dart';
 
 class GeminiService {
-  // API Key should be set via environment variable or secure storage
-  // Set your API key in: android/app/src/main/AndroidManifest.xml as meta-data
-  // Or use --dart-define=GEMINI_API_KEY=your_key when building
-  static const _apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: ''); 
-  
-  late GenerativeModel _model;
-  
-  GeminiService() {
-    if (_apiKey.isEmpty) {
-      throw Exception('GEMINI_API_KEY not set. Use --dart-define=GEMINI_API_KEY=your_key');
+  GenerativeModel? _model;
+  String _currentApiKey = '';
+  String _currentModelId = 'gemini-2.5-flash';
+
+  GeminiService({String? apiKey, String? modelId}) {
+    if (apiKey != null && apiKey.isNotEmpty) {
+      _currentApiKey = apiKey;
+      _currentModelId = modelId ?? 'gemini-2.0-flash';
+      _initModel();
+    }
+  }
+
+  void _initModel() {
+    if (_currentApiKey.isEmpty) {
+      _model = null;
+      return;
     }
     _model = GenerativeModel(
-      // Aggiornato al modello Gemini 3 Flash (Preview) per test
-      model: 'gemini-3-flash-preview', 
-      apiKey: _apiKey,
+      model: _currentModelId,
+      apiKey: _currentApiKey,
     );
   }
 
-  // Method to allow setting API key dynamically if needed (e.g. from user input)
-  void setApiKey(String apiKey) {
-    _model = GenerativeModel(
-      model: 'gemini-3-flash-preview', 
-      apiKey: apiKey,
-    );
+  bool get isConfigured => _model != null && _currentApiKey.isNotEmpty;
+
+  String get currentModelId => _currentModelId;
+
+  /// Aggiorna API key e/o modello
+  void updateSettings({String? apiKey, String? modelId}) {
+    if (apiKey != null) {
+      _currentApiKey = apiKey;
+    }
+    if (modelId != null) {
+      _currentModelId = modelId;
+    }
+    _initModel();
+  }
+
+  void _checkConfigured() {
+    if (!isConfigured) {
+      throw Exception('Gemini non configurato. Vai in Impostazioni per inserire l\'API Key.');
+    }
   }
 
   Future<Map<String, dynamic>> parseDietaPdf(Uint8List pdfBytes) async {
+    _checkConfigured();
     final prompt = dietaParsingPrompt;
-    
+
     final content = [
       Content.multi([
         TextPart(prompt),
@@ -40,7 +59,7 @@ class GeminiService {
       ])
     ];
 
-    final response = await _model.generateContent(content);
+    final response = await _model!.generateContent(content);
     final jsonString = response.text ?? '';
     
     // Pulisci eventuale markdown
@@ -53,8 +72,9 @@ class GeminiService {
   }
 
   Future<Map<String, dynamic>> parseBodygramPdf(Uint8List pdfBytes) async {
+    _checkConfigured();
     final prompt = bodygramParsingPrompt;
-    
+
     final content = [
       Content.multi([
         TextPart(prompt),
@@ -62,7 +82,7 @@ class GeminiService {
       ])
     ];
 
-    final response = await _model.generateContent(content);
+    final response = await _model!.generateContent(content);
     final jsonString = response.text ?? '';
     
     final cleanJson = jsonString
@@ -74,24 +94,27 @@ class GeminiService {
   }
   
   Future<GenerateContentResponse> chat(List<Content> history) async {
-    final chat = _model.startChat(history: history.sublist(0, history.length - 1));
+    _checkConfigured();
+    final chat = _model!.startChat(history: history.sublist(0, history.length - 1));
     return chat.sendMessage(history.last);
   }
 
   Future<String> simpleChat(String fullPrompt) async {
+    _checkConfigured();
     final content = [Content.text(fullPrompt)];
-    final response = await _model.generateContent(content);
+    final response = await _model!.generateContent(content);
     return response.text ?? 'Nessuna risposta generata.';
   }
 
   Future<String> chatWithImage(String prompt, Uint8List imageBytes) async {
+    _checkConfigured();
     final content = [
       Content.multi([
         TextPart(prompt),
-        DataPart('image/jpeg', imageBytes), // Assume JPEG for now, or detect mime type
+        DataPart('image/jpeg', imageBytes),
       ])
     ];
-    final response = await _model.generateContent(content);
+    final response = await _model!.generateContent(content);
     return response.text ?? 'Nessuna risposta generata per l\'immagine.';
   }
 }

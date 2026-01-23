@@ -2,8 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pasto.dart';
 
+/// Modelli Gemini disponibili
+enum GeminiModel {
+  gemini25Flash('gemini-2.5-flash', 'Gemini 2.5 Flash'),
+  gemini3FlashPreview('gemini-3-flash-preview', 'Gemini 3 Flash Preview'),
+  gemini3ProPreview('gemini-3-pro-preview', 'Gemini 3 Pro Preview');
+
+  final String modelId;
+  final String displayName;
+  const GeminiModel(this.modelId, this.displayName);
+
+  static GeminiModel fromModelId(String id) {
+    return GeminiModel.values.firstWhere(
+      (m) => m.modelId == id,
+      orElse: () => GeminiModel.gemini25Flash,
+    );
+  }
+}
+
 class SettingsProvider extends ChangeNotifier {
   final SharedPreferences _prefs;
+
+  // API Key e Modello Gemini
+  static const String _apiKeyKey = 'gemini_api_key';
+  static const String _modelKey = 'gemini_model';
+
+  String _apiKey = '';
+  GeminiModel _geminiModel = GeminiModel.gemini25Flash;
+
+  String get apiKey => _apiKey;
+  GeminiModel get geminiModel => _geminiModel;
+
+  // Callback per notificare quando API key o modello cambiano
+  VoidCallback? onApiSettingsChanged;
 
   // Orari di default
   static const Map<TipoPasto, TimeOfDay> _defaultOrari = {
@@ -19,8 +50,35 @@ class SettingsProvider extends ChangeNotifier {
   final Map<TipoPasto, TimeOfDay> _orariPasti = {};
 
   SettingsProvider(this._prefs) {
-    _loadOrari();
+    _loadSettings();
   }
+
+  void _loadSettings() {
+    _loadOrari();
+    _loadApiSettings();
+  }
+
+  void _loadApiSettings() {
+    _apiKey = _prefs.getString(_apiKeyKey) ?? '';
+    final modelId = _prefs.getString(_modelKey) ?? GeminiModel.gemini25Flash.modelId;
+    _geminiModel = GeminiModel.fromModelId(modelId);
+  }
+
+  Future<void> setApiKey(String apiKey) async {
+    _apiKey = apiKey;
+    await _prefs.setString(_apiKeyKey, apiKey);
+    onApiSettingsChanged?.call();
+    notifyListeners();
+  }
+
+  Future<void> setGeminiModel(GeminiModel model) async {
+    _geminiModel = model;
+    await _prefs.setString(_modelKey, model.modelId);
+    onApiSettingsChanged?.call();
+    notifyListeners();
+  }
+
+  bool get hasApiKey => _apiKey.isNotEmpty;
 
   void _loadOrari() {
     for (final tipo in TipoPasto.values) {
