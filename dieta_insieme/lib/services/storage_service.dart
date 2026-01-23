@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/dieta.dart';
 import '../models/bodygram.dart';
 import '../models/persona.dart';
+import '../models/peso_giornaliero.dart';
 
 class StorageService {
   
@@ -50,13 +51,69 @@ class StorageService {
     }
   }
 
+  // === PESI GIORNALIERI ===
+
+  // Salva peso giornaliero
+  Future<void> salvaPeso(PesoGiornaliero peso) async {
+    final path = await _localPath;
+    final file = File('$path/peso_${peso.personaId}_${peso.id}.json');
+    await file.writeAsString(jsonEncode(peso.toJson()));
+  }
+
+  // Carica peso giornaliero
+  Future<PesoGiornaliero?> caricaPeso(String personaId, String pesoId) async {
+    try {
+      final path = await _localPath;
+      final file = File('$path/peso_${personaId}_$pesoId.json');
+      final contents = await file.readAsString();
+      return PesoGiornaliero.fromJson(jsonDecode(contents));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Carica tutti i pesi di una persona
+  Future<List<PesoGiornaliero>> caricaPesiPersona(String personaId) async {
+    try {
+      final path = await _localPath;
+      final dir = Directory(path);
+      final List<PesoGiornaliero> pesi = [];
+
+      await for (final entity in dir.list()) {
+        if (entity is File && entity.path.contains('peso_${personaId}_')) {
+          try {
+            final contents = await entity.readAsString();
+            pesi.add(PesoGiornaliero.fromJson(jsonDecode(contents)));
+          } catch (_) {}
+        }
+      }
+
+      return pesi;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Elimina peso giornaliero
+  Future<void> eliminaPeso(PesoGiornaliero peso) async {
+    try {
+      final path = await _localPath;
+      final file = File('$path/peso_${peso.personaId}_${peso.id}.json');
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      print('Errore eliminazione peso: $e');
+    }
+  }
+
   // Salva l'intera lista delle persone (indice)
   Future<void> salvaPersone(List<Persona> persone) async {
     final path = await _localPath;
     final file = File('$path/persone_index.json');
-    
+
     // Salviamo solo i metadati essenziali per ricostruire la lista
-    // Le diete e i bodygram completi sono salvati in file separati per evitare file enormi
+    // Le diete, bodygram e pesi completi sono salvati in file separati
     final List<Map<String, dynamic>> indexData = persone.map((p) => {
       'id': p.id,
       'nome': p.nome,
@@ -66,8 +123,9 @@ class StorageService {
       // Per semplicità nello storico salviamo solo gli ID
       'storicoDieteIds': p.storicoDiete.map((d) => d.id).toList(),
       'storicoBodygramIds': p.storicoBodygram.map((b) => b.id).toList(),
+      'storicoPesiIds': p.storicoPesi.map((p) => p.id).toList(),
     }).toList();
-    
+
     await file.writeAsString(jsonEncode(indexData));
   }
 
@@ -98,16 +156,30 @@ class StorageService {
           bodygramAttivo = await caricaBodygram(pMap['bodygramAttivoId']);
         }
         
-        // Carica storici (opzionale per ora, implementazione base)
+        // Carica storico diete
         final List<Dieta> storicoDiete = [];
         if (pMap['storicoDieteIds'] != null) {
-           // TODO: Caricare storico se necessario
+          for (final dietaId in pMap['storicoDieteIds']) {
+            final dieta = await caricaDieta(dietaId);
+            if (dieta != null) {
+              storicoDiete.add(dieta);
+            }
+          }
         }
 
+        // Carica storico bodygram
         final List<Bodygram> storicoBodygram = [];
         if (pMap['storicoBodygramIds'] != null) {
-          // TODO: Caricare storico se necessario
+          for (final bodygramId in pMap['storicoBodygramIds']) {
+            final bodygram = await caricaBodygram(bodygramId);
+            if (bodygram != null) {
+              storicoBodygram.add(bodygram);
+            }
+          }
         }
+
+        // Carica storico pesi
+        final List<PesoGiornaliero> storicoPesi = await caricaPesiPersona(pMap['id']);
 
         persone.add(Persona(
           id: pMap['id'],
@@ -117,6 +189,7 @@ class StorageService {
           bodygramAttivo: bodygramAttivo,
           storicoDiete: storicoDiete,
           storicoBodygram: storicoBodygram,
+          storicoPesi: storicoPesi,
         ));
       }
       
@@ -127,29 +200,30 @@ class StorageService {
     }
   }
 
-  // Esporta dati
+  // Esporta dati - Versione 2 con storico completo
   Future<File> exportData(List<Persona> persone) async {
     final path = await _localPath;
     final Map<String, dynamic> exportData = {
-      'version': 1,
+      'version': 2,
       'timestamp': DateTime.now().toIso8601String(),
       'persone': persone.map((p) => p.toJson()).toList(),
     };
-    
+
     // Usiamo l'estensione .dieta per l'associazione automatica
     final file = File('$path/backup_dieta_insieme.dieta');
     await file.writeAsString(jsonEncode(exportData));
     return file;
   }
 
-  // Importa dati
+  // Importa dati - Compatibile con versione 1 e 2
   Future<void> importData(File file) async {
     try {
       final contents = await file.readAsString();
       final Map<String, dynamic> data = jsonDecode(contents);
-      
-      // Verifica versione (per ora semplice)
-      if (data['version'] != 1) {
+
+      // Verifica versione
+      final version = data['version'] as int;
+      if (version != 1 && version != 2) {
         throw Exception('Versione file non supportata');
       }
 
@@ -160,19 +234,17 @@ class StorageService {
 
       // Carica le persone esistenti per fare merge
       final personeEsistenti = await caricaPersone();
-      
+
       for (final nuovaPersona in personeImportate) {
         // Cerca se esiste già una persona con questo nome (case insensitive)
         final index = personeEsistenti.indexWhere(
-          (p) => p.nome.toLowerCase() == nuovaPersona.nome.toLowerCase()
-        );
+            (p) => p.nome.toLowerCase() == nuovaPersona.nome.toLowerCase());
 
         if (index != -1) {
           // Aggiorna esistente
           final personaEsistente = personeEsistenti[index];
-          
-          // Preserva ID originale se vogliamo, oppure sovrascriviamo tutto.
-          // Qui sovrascriviamo dieta e bodygram se presenti nel backup
+
+          // Sovrascriviamo dieta e bodygram se presenti nel backup
           if (nuovaPersona.dietaAttiva != null) {
             personaEsistente.dietaAttiva = nuovaPersona.dietaAttiva;
             await salvaDieta(nuovaPersona.dietaAttiva!);
@@ -180,6 +252,14 @@ class StorageService {
           if (nuovaPersona.bodygramAttivo != null) {
             personaEsistente.bodygramAttivo = nuovaPersona.bodygramAttivo;
             await salvaBodygram(nuovaPersona.bodygramAttivo!);
+          }
+          // Salva storico bodygram
+          for (final bodygram in nuovaPersona.storicoBodygram) {
+            await salvaBodygram(bodygram);
+          }
+          // Salva storico pesi
+          for (final peso in nuovaPersona.storicoPesi) {
+            await salvaPeso(peso);
           }
         } else {
           // Aggiungi nuova
@@ -190,12 +270,19 @@ class StorageService {
           if (nuovaPersona.bodygramAttivo != null) {
             await salvaBodygram(nuovaPersona.bodygramAttivo!);
           }
+          // Salva storico bodygram
+          for (final bodygram in nuovaPersona.storicoBodygram) {
+            await salvaBodygram(bodygram);
+          }
+          // Salva storico pesi
+          for (final peso in nuovaPersona.storicoPesi) {
+            await salvaPeso(peso);
+          }
         }
       }
 
       // Salva l'indice aggiornato
       await salvaPersone(personeEsistenti);
-      
     } catch (e) {
       print('Errore importazione: $e');
       rethrow;

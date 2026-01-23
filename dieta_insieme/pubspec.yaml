@@ -28,6 +28,9 @@ dependencies:
   # Storage
   shared_preferences: ^2.2.2
   
+  # Charts
+  fl_chart: ^0.68.0
+
   # Utils
   intl: ^0.18.1
   collection: ^1.18.0

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/persona.dart';
 import '../models/dieta.dart';
 import '../models/bodygram.dart';
+import '../models/peso_giornaliero.dart';
 import '../services/storage_service.dart';
 
 class AppState extends ChangeNotifier {
@@ -110,15 +111,81 @@ class AppState extends ChangeNotifier {
   Future<void> updateBodygram(String nomePersona, Bodygram bodygram) async {
     final index = _persone.indexWhere((p) => p.nome == nomePersona);
     if (index != -1) {
-      _persone[index].bodygramAttivo = bodygram;
-      
-      // Salva il bodygram su file separato
+      final persona = _persone[index];
       final storage = StorageService();
+
+      // Se c'è già un bodygram attivo, spostalo nello storico
+      if (persona.bodygramAttivo != null) {
+        final vecchioBodygram = persona.bodygramAttivo!;
+        // Verifica che non sia già nello storico (evita duplicati)
+        final esisteNelloStorico = persona.storicoBodygram.any(
+          (b) => b.id == vecchioBodygram.id,
+        );
+        if (!esisteNelloStorico) {
+          persona.storicoBodygram.add(vecchioBodygram);
+          // Il file del vecchio bodygram è già salvato
+        }
+      }
+
+      // Imposta il nuovo bodygram come attivo
+      persona.bodygramAttivo = bodygram;
+
+      // Salva il nuovo bodygram su file separato
       await storage.salvaBodygram(bodygram);
-      
+
       // Aggiorna l'indice delle persone
       await _salvaStato();
-      
+
+      notifyListeners();
+    }
+  }
+
+  /// Aggiunge o aggiorna il peso giornaliero
+  Future<void> addPesoGiornaliero(String nomePersona, double peso, {String? nota}) async {
+    final index = _persone.indexWhere((p) => p.nome == nomePersona);
+    if (index != -1) {
+      final persona = _persone[index];
+      final storage = StorageService();
+
+      // Cerca se esiste già un peso per oggi
+      final pesoEsistente = persona.pesoOggi;
+
+      if (pesoEsistente != null) {
+        // Aggiorna il peso esistente
+        final pesoAggiornato = pesoEsistente.copyWith(peso: peso, nota: nota);
+        // Rimuovi il vecchio e aggiungi il nuovo
+        persona.storicoPesi.removeWhere((p) => p.id == pesoEsistente.id);
+        persona.storicoPesi.add(pesoAggiornato);
+        await storage.salvaPeso(pesoAggiornato);
+      } else {
+        // Crea nuovo peso
+        final nuovoPeso = PesoGiornaliero.oggi(
+          personaId: persona.id,
+          peso: peso,
+          nota: nota,
+        );
+        persona.storicoPesi.add(nuovoPeso);
+        await storage.salvaPeso(nuovoPeso);
+      }
+
+      // Aggiorna l'indice delle persone
+      await _salvaStato();
+
+      notifyListeners();
+    }
+  }
+
+  /// Elimina un peso giornaliero
+  Future<void> eliminaPesoGiornaliero(String nomePersona, PesoGiornaliero peso) async {
+    final index = _persone.indexWhere((p) => p.nome == nomePersona);
+    if (index != -1) {
+      final persona = _persone[index];
+      final storage = StorageService();
+
+      persona.storicoPesi.removeWhere((p) => p.id == peso.id);
+      await storage.eliminaPeso(peso);
+      await _salvaStato();
+
       notifyListeners();
     }
   }

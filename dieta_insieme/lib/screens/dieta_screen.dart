@@ -3,12 +3,15 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/persona.dart';
 import '../models/pasto.dart';
-
 import '../models/bodygram.dart';
 import '../widgets/giorno_selector.dart';
 import '../widgets/pasto_card.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/progress_indicator_bar.dart';
+import '../widgets/peso_input_card.dart';
+import '../widgets/peso_chart.dart';
+import '../widgets/bodygram_trend_charts.dart';
+import '../widgets/bodygram_confronto.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_state.dart';
 import '../services/giorno_dieta_service.dart';
@@ -28,6 +31,7 @@ class DietaScreen extends StatefulWidget {
 class _DietaScreenState extends State<DietaScreen> with SingleTickerProviderStateMixin {
   late int _selectedDay;
   late TabController _tabController;
+  Bodygram? _bodygramSelezionatoPerConfronto;
 
   @override
   void initState() {
@@ -35,7 +39,7 @@ class _DietaScreenState extends State<DietaScreen> with SingleTickerProviderStat
     // Inizializza col giorno calcolato reale
     final service = Provider.of<GiornoDietaService>(context, listen: false);
     _selectedDay = service.getGiornoOggi(widget.persona.dietaAttiva?.dataInizio);
-    
+
     // Inizializza TabController con 2 tab
     _tabController = TabController(length: 2, vsync: this);
   }
@@ -249,156 +253,210 @@ class _DietaScreenState extends State<DietaScreen> with SingleTickerProviderStat
 
   /// Contenuto del tab Bodygram
   Widget _buildBodygramContent(BuildContext context, Persona persona) {
+    final appState = Provider.of<AppState>(context, listen: false);
     final bodygram = persona.bodygramAttivo;
-    
-    // Se non ci sono dati Bodygram
-    if (bodygram == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.monitor_heart_outlined, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
-                'Nessun dato corporeo disponibile',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textMuted,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Carica un PDF del report Bodygram per visualizzare i dati delle analisi corporee',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textMuted,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Mostra i dati del Bodygram
     final dateFormatter = DateFormat('d MMMM yyyy', 'it_IT');
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Text(
-            'Esame del ${dateFormatter.format(bodygram.dataEsame)}',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${bodygram.eta} anni - ${bodygram.sesso}',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 24),
-
-          // Section 1: Dati Base
-          StatCard(
-            title: 'Dati Base',
-            icon: Icons.monitor_weight_outlined,
-            children: [
-              StatRow(
-                icon: Icons.scale_outlined,
-                label: 'Peso',
-                value: bodygram.datiBase.peso.toStringAsFixed(1),
-                unit: 'kg',
-              ),
-              Divider(color: Colors.grey.shade100),
-              StatRow(
-                icon: Icons.height_outlined,
-                label: 'Altezza',
-                value: (bodygram.datiBase.altezza * 100).toStringAsFixed(0),
-                unit: 'cm',
-              ),
-              Divider(color: Colors.grey.shade100),
-              StatRow(
-                icon: Icons.calculate_outlined,
-                label: 'BMI',
-                value: bodygram.datiBase.bmi.toStringAsFixed(1),
-                trailing: _buildBmiBadge(context, bodygram.datiBase.bmi),
-              ),
-            ],
+          // 1. PESO DI OGGI - Card per inserire/modificare peso giornaliero
+          PesoInputCard(
+            pesoOggi: persona.pesoOggi,
+            ultimoPeso: persona.ultimoPeso,
+            onSalva: (peso, nota) {
+              appState.addPesoGiornaliero(persona.nome, peso, nota: nota);
+            },
           ),
 
-          // Section 2: Composizione Corporea
-          StatCard(
-            title: 'Composizione',
-            icon: Icons.pie_chart_outline,
-            children: [
-              _buildFatMassBar(context, bodygram),
-              Divider(color: Colors.grey.shade100, height: 24),
-              ProgressIndicatorBar(
-                label: 'Massa Magra',
-                value: bodygram.componenti.massaMagraPercentuale,
-                valueText: '${bodygram.componenti.massaMagra.toStringAsFixed(1)} kg',
-                color: AppColors.primary,
-              ),
-            ],
+          // 2. ANDAMENTO PESO GIORNALIERO - Grafico (ultimi 30 giorni)
+          if (persona.storicoPesi.isNotEmpty)
+            PesoChart(
+              pesi: persona.storicoPesi,
+              giorniDaMostrare: 30,
+            ),
+
+          // 3. ANDAMENTO BODYGRAM - Grafici trend dai report
+          BodygramTrendCharts(
+            storico: persona.storicoBodygram,
+            attivo: bodygram,
           ),
 
-          // Section 3: Fluidi
-          StatCard(
-            title: 'Fluidi',
-            icon: Icons.water_drop_outlined,
-            children: [
-              StatRow(
-                icon: Icons.water_outlined,
-                label: 'Acqua Totale',
-                value: bodygram.fluidi.acquaTotale.toStringAsFixed(1),
-                unit: 'Lt',
-                trailing: Text(
-                  '${bodygram.fluidi.acquaTotalePercentuale.toStringAsFixed(1)}%',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+          // 4. STORICO BODYGRAM - Lista orizzontale per selezionare confronto
+          if (persona.storicoBodygram.isNotEmpty)
+            BodygramStoricoSelector(
+              storico: persona.storicoBodygram,
+              attivo: bodygram,
+              selezionato: _bodygramSelezionatoPerConfronto,
+              onSeleziona: (bodygramSelezionato) {
+                setState(() {
+                  _bodygramSelezionatoPerConfronto = bodygramSelezionato;
+                });
+              },
+            ),
+
+          // 5. CONFRONTO - Tabella se selezionato un bodygram dallo storico
+          if (_bodygramSelezionatoPerConfronto != null && bodygram != null)
+            BodygramConfronto(
+              precedente: _bodygramSelezionatoPerConfronto!,
+              attuale: bodygram,
+            ),
+
+          // Se non ci sono dati Bodygram attivi
+          if (bodygram == null) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.monitor_heart_outlined,
+                        size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Nessun dato Bodygram',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Carica un PDF del report Bodygram per visualizzare i dati delle analisi corporee',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-              Divider(color: Colors.grey.shade100),
-              StatRow(
-                icon: Icons.opacity_outlined,
-                label: 'Idratazione',
-                value: bodygram.idratazioneTissutale.toStringAsFixed(1),
-                unit: '%',
-                trailing: _buildHydrationBadge(context, bodygram),
+            ),
+          ] else ...[
+            // 6. CARD ESISTENTI - Dati Base, Composizione, Fluidi, Metabolismo
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  // Header con data esame
+                  Text(
+                    'Esame del ${dateFormatter.format(bodygram.dataEsame)}',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${bodygram.eta} anni - ${bodygram.sesso}',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
 
-          // Section 4: Metabolismo
-          StatCard(
-            title: 'Metabolismo',
-            icon: Icons.bolt_outlined,
-            children: [
-              StatRow(
-                icon: Icons.local_fire_department_outlined,
-                label: 'Metabolismo Basale',
-                value: bodygram.metabolismoBasale.toStringAsFixed(0),
-                unit: 'kcal',
-              ),
-              Divider(color: Colors.grey.shade100),
-              StatRow(
-                icon: Icons.speed_outlined,
-                label: 'Angolo di Fase',
-                value: bodygram.angoloFase.toStringAsFixed(1),
-                unit: '°',
-                trailing: _buildPhaseAngleBadge(context, bodygram),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 24),
+            // Section 1: Dati Base
+            StatCard(
+              title: 'Dati Base',
+              icon: Icons.monitor_weight_outlined,
+              children: [
+                StatRow(
+                  icon: Icons.scale_outlined,
+                  label: 'Peso',
+                  value: bodygram.datiBase.peso.toStringAsFixed(1),
+                  unit: 'kg',
+                ),
+                Divider(color: Colors.grey.shade100),
+                StatRow(
+                  icon: Icons.height_outlined,
+                  label: 'Altezza',
+                  value: (bodygram.datiBase.altezza * 100).toStringAsFixed(0),
+                  unit: 'cm',
+                ),
+                Divider(color: Colors.grey.shade100),
+                StatRow(
+                  icon: Icons.calculate_outlined,
+                  label: 'BMI',
+                  value: bodygram.datiBase.bmi.toStringAsFixed(1),
+                  trailing: _buildBmiBadge(context, bodygram.datiBase.bmi),
+                ),
+              ],
+            ),
+
+            // Section 2: Composizione Corporea
+            StatCard(
+              title: 'Composizione',
+              icon: Icons.pie_chart_outline,
+              children: [
+                _buildFatMassBar(context, bodygram),
+                Divider(color: Colors.grey.shade100, height: 24),
+                ProgressIndicatorBar(
+                  label: 'Massa Magra',
+                  value: bodygram.componenti.massaMagraPercentuale,
+                  valueText:
+                      '${bodygram.componenti.massaMagra.toStringAsFixed(1)} kg',
+                  color: AppColors.primary,
+                ),
+              ],
+            ),
+
+            // Section 3: Fluidi
+            StatCard(
+              title: 'Fluidi',
+              icon: Icons.water_drop_outlined,
+              children: [
+                StatRow(
+                  icon: Icons.water_outlined,
+                  label: 'Acqua Totale',
+                  value: bodygram.fluidi.acquaTotale.toStringAsFixed(1),
+                  unit: 'Lt',
+                  trailing: Text(
+                    '${bodygram.fluidi.acquaTotalePercentuale.toStringAsFixed(1)}%',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ),
+                Divider(color: Colors.grey.shade100),
+                StatRow(
+                  icon: Icons.opacity_outlined,
+                  label: 'Idratazione',
+                  value: bodygram.idratazioneTissutale.toStringAsFixed(1),
+                  unit: '%',
+                  trailing: _buildHydrationBadge(context, bodygram),
+                ),
+              ],
+            ),
+
+            // Section 4: Metabolismo
+            StatCard(
+              title: 'Metabolismo',
+              icon: Icons.bolt_outlined,
+              children: [
+                StatRow(
+                  icon: Icons.local_fire_department_outlined,
+                  label: 'Metabolismo Basale',
+                  value: bodygram.metabolismoBasale.toStringAsFixed(0),
+                  unit: 'kcal',
+                ),
+                Divider(color: Colors.grey.shade100),
+                StatRow(
+                  icon: Icons.speed_outlined,
+                  label: 'Angolo di Fase',
+                  value: bodygram.angoloFase.toStringAsFixed(1),
+                  unit: '°',
+                  trailing: _buildPhaseAngleBadge(context, bodygram),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+          ],
         ],
       ),
     );
