@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 class ChatMessage {
-  final String testo;
+  String testo;
   final bool isUser;
   final DateTime timestamp;
   final Uint8List? imageBytes;

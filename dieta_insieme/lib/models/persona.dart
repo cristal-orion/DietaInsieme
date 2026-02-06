@@ -6,6 +6,7 @@ class Persona {
   final String id;
   final String nome;
   final String? avatarEmoji;
+  String? immagineProfilo; // Path locale all'immagine profilo
   Dieta? dietaAttiva;
   Bodygram? bodygramAttivo;
   final List<Dieta> storicoDiete;
@@ -16,6 +17,7 @@ class Persona {
     required this.id,
     required this.nome,
     this.avatarEmoji,
+    this.immagineProfilo,
     this.dietaAttiva,
     this.bodygramAttivo,
     this.storicoDiete = const [],
@@ -72,6 +74,7 @@ class Persona {
     'id': id,
     'nome': nome,
     'avatar_emoji': avatarEmoji,
+    'immagine_profilo': immagineProfilo,
     'dieta_attiva': dietaAttiva?.toJson(),
     'bodygram_attivo': bodygramAttivo?.toJson(),
     'storico_bodygram': storicoBodygram.map((b) => b.toJson()).toList(),
@@ -83,6 +86,7 @@ class Persona {
       id: json['id'] as String,
       nome: json['nome'] as String,
       avatarEmoji: json['avatar_emoji'] as String?,
+      immagineProfilo: json['immagine_profilo'] as String?,
       dietaAttiva: json['dieta_attiva'] != null
           ? Dieta.fromJson(json['dieta_attiva'] as Map<String, dynamic>)
           : null,

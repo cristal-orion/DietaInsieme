@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/persona.dart';
 import '../theme/app_theme.dart';
@@ -33,14 +34,21 @@ class PersonaCard extends StatelessWidget {
                 CircleAvatar(
                   backgroundColor: AppColors.primaryBg,
                   radius: 24,
-                  child: Text(
-                    persona.nome[0].toUpperCase(),
-                    style: GoogleFonts.fraunces(
-                      fontSize: 24,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  backgroundImage: persona.immagineProfilo != null &&
+                          File(persona.immagineProfilo!).existsSync()
+                      ? FileImage(File(persona.immagineProfilo!))
+                      : null,
+                  child: persona.immagineProfilo != null &&
+                          File(persona.immagineProfilo!).existsSync()
+                      ? null
+                      : Text(
+                          persona.nome.isNotEmpty ? persona.nome[0].toUpperCase() : '?',
+                          style: GoogleFonts.fraunces(
+                            fontSize: 24,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 16),
                 Text(

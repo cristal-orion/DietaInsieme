@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/persona.dart';
 import '../models/dieta.dart';
 import '../models/bodygram.dart';
@@ -28,6 +29,21 @@ class AppState extends ChangeNotifier {
       nome: nome,
     );
     _persone.add(nuovaPersona);
+    await _salvaStato();
+    notifyListeners();
+  }
+
+  /// Aggiorna l'immagine profilo di una persona
+  Future<void> updateImmagineProfilo(String personaId, File imageFile) async {
+    final index = _persone.indexWhere((p) => p.id == personaId);
+    if (index == -1) return;
+
+    // Copia l'immagine nella directory dell'app con nome stabile
+    final appDir = await getApplicationDocumentsDirectory();
+    final fileName = 'profilo_$personaId.jpg';
+    final savedFile = await imageFile.copy('${appDir.path}/$fileName');
+
+    _persone[index].immagineProfilo = savedFile.path;
     await _salvaStato();
     notifyListeners();
   }

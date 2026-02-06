@@ -62,38 +62,53 @@ class ChatProvider extends ChangeNotifier {
       _saveHistory(); // Salva dopo messaggio utente
       notifyListeners();
 
+      // Crea subito un messaggio vuoto del bot per lo streaming
+      final botMessage = ChatMessage(
+        testo: '',
+        isUser: false,
+      );
+      _messages.add(botMessage);
+      notifyListeners();
+
       try {
         // Costruisci il prompt di sistema con il contesto attuale
 
       final systemPrompt = _buildSystemPrompt();
       
       // Prepara la history per Gemini
-      // Nota: Per ora passiamo solo il testo precedente come contesto
-      // In una implementazione più avanzata potremmo passare tutta la history strutturata
       final history = _messages
-          .where((m) => m != userMessage) // Escludi l'ultimo messaggio appena aggiunto
+          .where((m) => m != userMessage && m != botMessage) // Escludi l'ultimo messaggio e la risposta vuota
           .map((m) => "${m.isUser ? 'Utente' : 'Assistente'}: ${m.testo}")
           .join("\n");
       
       final fullPrompt = "$systemPrompt\n\nCronologia Chat:\n$history\n\nUtente: $testo";
 
-      String risposta;
+      final buffer = StringBuffer();
+      Stream<String> stream;
+      
       if (imageBytes != null) {
-        risposta = await _geminiService.chatWithImage(fullPrompt, imageBytes);
+        stream = _geminiService.chatWithImageStream(fullPrompt, imageBytes);
       } else {
-        risposta = await _geminiService.simpleChat(fullPrompt);
+        stream = _geminiService.simpleChatStream(fullPrompt);
       }
 
-      _messages.add(ChatMessage(
-        testo: risposta,
-        isUser: false,
-      ));
-      _saveHistory(); // Salva dopo risposta
+      await for (final chunk in stream) {
+        buffer.write(chunk);
+        botMessage.testo = buffer.toString();
+        notifyListeners();
+      }
+
+      // Se non ha generato nulla, metti un messaggio di default
+      if (botMessage.testo.isEmpty) {
+        botMessage.testo = 'Nessuna risposta generata.';
+      }
+
+      _saveHistory(); // Salva dopo risposta completa
     } catch (e) {
-      _messages.add(ChatMessage(
-        testo: "Mi dispiace, si è verificato un errore: $e",
-        isUser: false,
-      ));
+      // Se il messaggio bot è vuoto (errore prima di qualsiasi chunk), aggiorna il suo testo
+      // Altrimenti, il messaggio bot vuoto è già in lista, aggiorniamolo
+      final lastBotMsg = _messages.lastWhere((m) => !m.isUser);
+      lastBotMsg.testo = "Mi dispiace, si è verificato un errore: $e";
       _saveHistory(); // Salva anche errori
     } finally {
       _isLoading = false;

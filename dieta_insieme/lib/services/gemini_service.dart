@@ -106,6 +106,19 @@ class GeminiService {
     return response.text ?? 'Nessuna risposta generata.';
   }
 
+  /// Versione streaming di simpleChat: restituisce un Stream di chunk di testo
+  Stream<String> simpleChatStream(String fullPrompt) async* {
+    _checkConfigured();
+    final content = [Content.text(fullPrompt)];
+    final responseStream = _model!.generateContentStream(content);
+    await for (final chunk in responseStream) {
+      final text = chunk.text;
+      if (text != null && text.isNotEmpty) {
+        yield text;
+      }
+    }
+  }
+
   Future<String> chatWithImage(String prompt, Uint8List imageBytes) async {
     _checkConfigured();
     final content = [
@@ -116,5 +129,23 @@ class GeminiService {
     ];
     final response = await _model!.generateContent(content);
     return response.text ?? 'Nessuna risposta generata per l\'immagine.';
+  }
+
+  /// Versione streaming di chatWithImage
+  Stream<String> chatWithImageStream(String prompt, Uint8List imageBytes) async* {
+    _checkConfigured();
+    final content = [
+      Content.multi([
+        TextPart(prompt),
+        DataPart('image/jpeg', imageBytes),
+      ])
+    ];
+    final responseStream = _model!.generateContentStream(content);
+    await for (final chunk in responseStream) {
+      final text = chunk.text;
+      if (text != null && text.isNotEmpty) {
+        yield text;
+      }
+    }
   }
 }

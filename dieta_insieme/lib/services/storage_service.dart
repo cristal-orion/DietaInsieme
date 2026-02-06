@@ -118,6 +118,7 @@ class StorageService {
       'id': p.id,
       'nome': p.nome,
       'avatarEmoji': p.avatarEmoji,
+      'immagineProfilo': p.immagineProfilo,
       'dietaAttivaId': p.dietaAttiva?.id,
       'bodygramAttivoId': p.bodygramAttivo?.id,
       // Per semplicità nello storico salviamo solo gli ID
@@ -185,6 +186,7 @@ class StorageService {
           id: pMap['id'],
           nome: pMap['nome'],
           avatarEmoji: pMap['avatarEmoji'],
+          immagineProfilo: pMap['immagineProfilo'],
           dietaAttiva: dietaAttiva,
           bodygramAttivo: bodygramAttivo,
           storicoDiete: storicoDiete,

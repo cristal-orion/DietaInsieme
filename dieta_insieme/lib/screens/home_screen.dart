@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
@@ -22,6 +23,31 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  Timer? _mealRefreshTimer;
+  TipoPasto? _lastPasto;
+
+  @override
+  void initState() {
+    super.initState();
+    // Controlla ogni 30 secondi se il pasto corrente è cambiato
+    _mealRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final nuovoPasto = settings.getPastoCorrente();
+      if (nuovoPasto != _lastPasto) {
+        setState(() {
+          _lastPasto = nuovoPasto;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _mealRefreshTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
@@ -33,8 +59,42 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('DietaInsieme'),
         backgroundColor: Colors.white,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: 'Aggiungi',
+            onSelected: (value) {
+              if (value == 'persona') {
+                _showAddPersonDialog(context);
+              } else if (value == 'pdf') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const UploadScreen()),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'persona',
+                child: ListTile(
+                  leading: Icon(Icons.person_add),
+                  title: Text('Aggiungi persona'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'pdf',
+                child: ListTile(
+                  leading: Icon(Icons.file_upload),
+                  title: Text('Carica documento PDF'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+            ],
+          ),
           IconButton(
-            icon: const Icon(Icons.chat_bubble_outline), // Added Chat icon
+            icon: const Icon(Icons.chat_bubble_outline),
             onPressed: () {
               Navigator.push(
                 context,
@@ -101,43 +161,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (Provider.of<AppState>(context, listen: false).persone.isEmpty) {
-            _showAddPersonDialog(context);
-          } else {
-            showModalBottomSheet(
-              context: context,
-              builder: (context) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.person_add),
-                    title: const Text('Aggiungi nuova persona'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showAddPersonDialog(context);
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.file_upload),
-                    title: const Text('Carica documento PDF'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const UploadScreen()),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            );
-          }
-        },
-        label: const Text('Aggiungi'),
-        icon: const Icon(Icons.add),
       ),
     );
   }

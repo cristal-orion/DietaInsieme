@@ -13,14 +13,11 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final ScrollController _scrollController = ScrollController();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateContext();
-      _scrollToBottom();
     });
   }
 
@@ -28,16 +25,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final appState = Provider.of<AppState>(context, listen: false);
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     chatProvider.updatePersone(appState.persone);
-  }
-
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
   }
 
   @override
@@ -76,11 +63,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Consumer<ChatProvider>(
         builder: (context, chatProvider, child) {
-          // Auto-scroll when new messages arrive
-          if (chatProvider.messages.isNotEmpty) {
-             WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
-          }
-
           return Column(
             children: [
               Expanded(
@@ -100,11 +82,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       )
                     : ListView.builder(
-                        controller: _scrollController,
+                        reverse: true,
                         padding: const EdgeInsets.all(16),
                         itemCount: chatProvider.messages.length,
                         itemBuilder: (context, index) {
-                          return ChatMessageBubble(message: chatProvider.messages[index]);
+                          // Con reverse: true, l'indice 0 corrisponde all'ultimo messaggio
+                          final messageIndex = chatProvider.messages.length - 1 - index;
+                          return ChatMessageBubble(message: chatProvider.messages[messageIndex]);
                         },
                       ),
               ),

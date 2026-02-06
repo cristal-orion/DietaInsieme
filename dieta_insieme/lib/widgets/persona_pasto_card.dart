@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../models/persona.dart';
 import '../models/pasto.dart';
 import '../models/alimento.dart';
+import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 
 class PersonaPastoCard extends StatelessWidget {
@@ -17,6 +21,47 @@ class PersonaPastoCard extends StatelessWidget {
     required this.giorno,
     required this.onTap,
   });
+
+  void _pickProfileImage(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Scatta foto'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _selectImage(context, ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Scegli dalla galleria'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _selectImage(context, ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectImage(BuildContext context, ImageSource source) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, maxWidth: 512, maxHeight: 512, imageQuality: 85);
+    if (picked != null) {
+      final file = File(picked.path);
+      if (context.mounted) {
+        await Provider.of<AppState>(context, listen: false)
+            .updateImmagineProfilo(persona.id, file);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,14 +83,48 @@ class PersonaPastoCard extends StatelessWidget {
               // Header con Nome
               Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                    child: Text(
-                      persona.nome.isNotEmpty ? persona.nome[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  GestureDetector(
+                    onTap: () => _pickProfileImage(context),
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: AppColors.primary.withOpacity(0.1),
+                          backgroundImage: persona.immagineProfilo != null &&
+                                  File(persona.immagineProfilo!).existsSync()
+                              ? FileImage(File(persona.immagineProfilo!))
+                              : null,
+                          child: persona.immagineProfilo != null &&
+                                  File(persona.immagineProfilo!).existsSync()
+                              ? null
+                              : Text(
+                                  persona.nome.isNotEmpty
+                                      ? persona.nome[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
